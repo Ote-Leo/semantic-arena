@@ -1,0 +1,12 @@
+chunking:
+  max_characters: 1_200
+  overlap_characters: 160
+retrieval:
+  lexical_limit: 20
+  vector_limit: 20
+  final_limit: 8
+  lexical_weight: 1.0
+  vector_weight: 1.0
+  rrf_k: 60
+answering:
+  maximum_quotes: 3

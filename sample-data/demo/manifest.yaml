@@ -1,0 +1,13 @@
+id: demo
+name: Clinical trial briefing
+description: A small local-only medical research briefing for validating evidence-only behavior.
+sources:
+  - glob: documents/*.md
+    format: markdown
+    text_field: text
+    title_field: title
+  - glob: documents/*.jsonl
+    format: jsonl
+    id_field: id
+    title_field: title
+    text_field: text

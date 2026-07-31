@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A strict evidence-only semantic search comparison arena." />
+    <title>Semantic Arena</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">RETRIEVAL LAB / 01</p>
+          <h1>Semantic<br /><em>Arena</em></h1>
+        </div>
+        <div class="policy">
+          <span class="signal"></span>
+          <div>
+            <strong>Evidence only</strong>
+            <p>Every displayed claim is an exact quote from the selected index.</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="control-deck" aria-label="Arena configuration">
+        <div class="control-group dataset-control">
+          <label for="dataset">Dataset</label>
+          <select id="dataset" disabled>
+            <option>Loading datasets...</option>
+          </select>
+          <p id="dataset-description" class="helper"></p>
+        </div>
+        <fieldset class="control-group engine-control">
+          <legend>Compare engines</legend>
+          <div id="engine-list" class="engine-list" aria-live="polite"></div>
+        </fieldset>
+        <div class="control-group index-control">
+          <label>Index state</label>
+          <div id="index-status" class="index-status">Checking services...</div>
+          <button id="index-button" class="secondary" type="button" disabled>Index selected</button>
+        </div>
+      </section>
+
+      <section class="query-deck" aria-labelledby="query-heading">
+        <div class="query-heading">
+          <p class="eyebrow">QUESTION</p>
+          <h2 id="query-heading">Ask the index.</h2>
+        </div>
+        <form id="query-form">
+          <label class="sr-only" for="query">Question</label>
+          <textarea
+            id="query"
+            rows="3"
+            placeholder="Ask a question that the selected dataset can answer..."
+            required
+          ></textarea>
+          <div class="form-footer">
+            <p>Responses are extracts, never generated prose.</p>
+            <button id="ask-button" type="submit" disabled>Run comparison <span>-></span></button>
+          </div>
+        </form>
+      </section>
+
+      <section id="notice" class="notice" hidden aria-live="polite"></section>
+      <section id="results" class="results" aria-live="polite"></section>
+    </main>
+    <template id="result-template">
+      <article class="result-card">
+        <header class="result-header">
+          <div>
+            <p class="engine-kicker"></p>
+            <h3></h3>
+          </div>
+          <span class="result-state"></span>
+        </header>
+        <div class="answer"></div>
+        <section class="citations">
+          <h4>Evidence</h4>
+          <ol></ol>
+        </section>
+        <details class="diagnostics">
+          <summary>Retrieval diagnostics</summary>
+          <div class="timings"></div>
+          <ol class="candidates"></ol>
+        </details>
+      </article>
+    </template>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
