@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,8 +36,9 @@ from rag.selector import (
     OpenAICompatibleEvidenceSelector,
 )
 from rag.service import AnswerService
-from search.base import SearchEngine
+from search.base import SearchEngine, SearchEngineError
 from search.fusion import fuse_rankings
+from search.naming import index_name
 from settings import ROOT_DIR, ArenaConfig, RuntimeSettings, get_arena_config, get_runtime_settings
 from solr.adapter import SolrSearchEngine
 
@@ -115,7 +116,10 @@ def create_app(
 
     @app.get("/", include_in_schema=False)
     async def frontend() -> FileResponse:
-        return FileResponse(FRONTEND_DIR / "index.html")
+        return FileResponse(
+            FRONTEND_DIR / "index.html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/api/health", response_model=HealthResponse)
     async def health(request: Request) -> HealthResponse:
@@ -187,6 +191,7 @@ def create_app(
                     id=manifest.id,
                     name=manifest.name,
                     description=manifest.description,
+                    index_name=index_name(manifest.id),
                     engine_indexes=engine_indexes,
                 )
             )
@@ -198,6 +203,20 @@ def create_app(
         _require_dataset(services.catalog, payload.dataset_id)
         _require_engines(services, payload.engine_ids)
         return _job_response(services.jobs.start(payload.dataset_id, payload.engine_ids))
+
+    @app.delete(
+        "/api/indexes/{dataset_id}/{engine_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    async def delete_index(request: Request, dataset_id: str, engine_id: str) -> Response:
+        services = _services(request)
+        _require_dataset(services.catalog, dataset_id)
+        engine = _require_engines(services, [engine_id])[0]
+        try:
+            await engine.delete_index(dataset_id)
+        except SearchEngineError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/api/jobs/{job_id}", response_model=JobResponse)
     async def get_job(request: Request, job_id: str) -> JobResponse:

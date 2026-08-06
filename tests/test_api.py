@@ -33,6 +33,9 @@ class FakeEngine:
     async def index_exists(self, dataset_id: str) -> bool:
         return self.indexed
 
+    async def delete_index(self, dataset_id: str) -> None:
+        self.indexed = False
+
     async def replace_index(
         self,
         dataset_id: str,
@@ -117,3 +120,28 @@ def test_api_index_job_uses_shared_chunks_and_vectors() -> None:
 
     assert job["status"] == "succeeded"
     assert job["result"] == {"fake": 3}
+
+
+def test_api_lists_and_deletes_a_dataset_index() -> None:
+    with _client() as client:
+        create_response = client.post(
+            "/api/indexes",
+            json={"dataset_id": "demo", "engine_ids": ["fake"]},
+        )
+        job_id = create_response.json()["id"]
+        for _ in range(10):
+            job = client.get(f"/api/jobs/{job_id}").json()
+            if job["status"] in {"succeeded", "failed"}:
+                break
+            time.sleep(0.01)
+
+        before = client.get("/api/datasets").json()[0]
+        delete_response = client.delete("/api/indexes/demo/fake")
+        after = client.get("/api/datasets").json()[0]
+
+    assert job["status"] == "succeeded"
+    assert before["index_name"] == "arena_demo"
+    assert before["engine_indexes"] == {"fake": True}
+    assert delete_response.status_code == 204
+    assert delete_response.content == b""
+    assert after["engine_indexes"] == {"fake": False}

@@ -38,16 +38,24 @@ class SolrSearchEngine:
 
     async def index_exists(self, dataset_id: str) -> bool:
         name = index_name(dataset_id)
-        try:
-            response = await self.client.get(
-                f"{self.base_url}/admin/cores",
-                params={"action": "STATUS", "core": name, "wt": "json"},
-            )
-            response.raise_for_status()
-        except httpx.HTTPError:
-            return False
+        response = await self._request(
+            "GET",
+            f"{self.base_url}/admin/cores",
+            params={"action": "STATUS", "core": name, "wt": "json"},
+        )
         core_status = response.json().get("status", {}).get(name, {})
         return core_status.get("name") == name
+
+    async def delete_index(self, dataset_id: str) -> None:
+        if not await self.index_exists(dataset_id):
+            return
+        await self._admin_action(
+            "UNLOAD",
+            core=index_name(dataset_id),
+            deleteIndex="true",
+            deleteDataDir="true",
+            deleteInstanceDir="true",
+        )
 
     async def replace_index(
         self,
@@ -61,14 +69,7 @@ class SolrSearchEngine:
                 "Solr indexing received a different number of chunks and vectors."
             )
         name = index_name(dataset_id)
-        if await self.index_exists(dataset_id):
-            await self._admin_action(
-                "UNLOAD",
-                core=name,
-                deleteIndex="true",
-                deleteDataDir="true",
-                deleteInstanceDir="true",
-            )
+        await self.delete_index(dataset_id)
         await self._admin_action("CREATE", name=name, instanceDir=name, configSet=self.configset)
         await self._configure_schema(name, dimensions)
         documents = [

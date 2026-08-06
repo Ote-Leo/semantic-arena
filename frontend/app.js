@@ -1,4 +1,10 @@
-const state = { datasets: [], engines: [], selectedDataset: "", activeJob: null };
+const state = {
+  datasets: [],
+  engines: [],
+  selectedDataset: "",
+  activeJob: null,
+  deletingEngine: null,
+};
 
 const elements = {
   dataset: document.querySelector("#dataset"),
@@ -23,6 +29,7 @@ async function request(path, options = {}) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `Request failed with ${response.status}.`);
   }
+  if (response.status === 204) return null;
   return response.json();
 }
 
@@ -54,12 +61,15 @@ function renderEngines() {
 }
 
 function renderDatasets() {
+  const previousSelection = state.selectedDataset;
   elements.dataset.replaceChildren();
   for (const dataset of state.datasets) {
     const option = new Option(dataset.name, dataset.id);
     elements.dataset.add(option);
   }
-  state.selectedDataset = state.datasets[0]?.id || "";
+  state.selectedDataset = state.datasets.some((dataset) => dataset.id === previousSelection)
+    ? previousSelection
+    : state.datasets[0]?.id || "";
   elements.dataset.value = state.selectedDataset;
   elements.dataset.disabled = !state.selectedDataset;
   renderDatasetState();
@@ -74,21 +84,67 @@ function renderDatasetState() {
     return;
   }
   elements.datasetDescription.textContent = dataset.description || "Local indexed source material.";
-  const selected = selectedEngineIds();
-  const ready = selected.filter((id) => dataset.engine_indexes[id]);
-  const absent = selected.filter((id) => !dataset.engine_indexes[id]);
-  elements.indexStatus.textContent = selected.length
-    ? `${ready.length}/${selected.length} selected engine indexes ready${absent.length ? "; indexing required" : ""}.`
-    : "Select at least one available engine.";
+  renderIndexState(dataset);
   setActionAvailability();
+}
+
+function renderIndexState(dataset) {
+  elements.indexStatus.replaceChildren();
+  for (const engine of state.engines) {
+    const indexed = Boolean(dataset.engine_indexes[engine.id]);
+    const deleting = state.deletingEngine === engine.id;
+    const row = document.createElement("div");
+    row.className = "index-row";
+
+    const identity = document.createElement("div");
+    identity.className = "index-identity";
+    const engineLabel = document.createElement("strong");
+    engineLabel.textContent = engine.label;
+    const name = document.createElement("code");
+    name.textContent = dataset.index_name;
+    identity.append(engineLabel, name);
+
+    const badge = document.createElement("span");
+    badge.className = "index-badge";
+    if (!engine.available) {
+      badge.textContent = "unavailable";
+      badge.classList.add("unavailable");
+    } else if (deleting) {
+      badge.textContent = "deleting";
+      badge.classList.add("working");
+    } else if (indexed) {
+      badge.textContent = "ready";
+      badge.classList.add("ready");
+    } else {
+      badge.textContent = "not indexed";
+    }
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "index-delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.hidden = !indexed;
+    deleteButton.dataset.available = String(engine.available);
+    deleteButton.setAttribute(
+      "aria-label",
+      `Delete ${dataset.index_name} from ${engine.label}`,
+    );
+    deleteButton.addEventListener("click", () => deleteIndex(engine.id));
+
+    row.append(identity, badge, deleteButton);
+    elements.indexStatus.append(row);
+  }
 }
 
 function setActionAvailability() {
   const hasDataset = Boolean(selectedDataset());
   const hasEngines = selectedEngineIds().length > 0;
-  const busy = Boolean(state.activeJob);
+  const busy = Boolean(state.activeJob || state.deletingEngine);
   elements.indexButton.disabled = !hasDataset || !hasEngines || busy;
   elements.askButton.disabled = !hasDataset || !hasEngines || busy;
+  for (const button of elements.indexStatus.querySelectorAll(".index-delete")) {
+    button.disabled = busy || button.dataset.available !== "true";
+  }
 }
 
 async function refreshData() {
@@ -126,7 +182,7 @@ async function startIndex() {
     showNotice(error.message, "error");
   } finally {
     state.activeJob = null;
-    setActionAvailability();
+    renderDatasetState();
   }
 }
 
@@ -137,6 +193,33 @@ async function pollJob(jobId) {
     if (job.status === "succeeded") return;
     if (job.status === "failed") throw new Error(job.error || "Index build failed.");
     await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+async function deleteIndex(engineId) {
+  const dataset = selectedDataset();
+  const engine = state.engines.find((candidate) => candidate.id === engineId);
+  if (!dataset || !engine) return;
+  const confirmed = window.confirm(
+    `Delete ${dataset.index_name} from ${engine.label}? This cannot be undone.`,
+  );
+  if (!confirmed) return;
+
+  state.deletingEngine = engineId;
+  renderDatasetState();
+  showNotice(`Deleting ${dataset.index_name} from ${engine.label}...`, "");
+  try {
+    await request(
+      `/api/indexes/${encodeURIComponent(dataset.id)}/${encodeURIComponent(engineId)}`,
+      { method: "DELETE" },
+    );
+    await refreshData();
+    showNotice(`Deleted ${dataset.index_name} from ${engine.label}.`, "");
+  } catch (error) {
+    showNotice(error.message, "error");
+  } finally {
+    state.deletingEngine = null;
+    renderDatasetState();
   }
 }
 

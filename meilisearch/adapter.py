@@ -35,7 +35,17 @@ class MeilisearchSearchEngine:
         )
         if response.status_code == 404:
             return False
-        return response.is_success
+        try:
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SearchEngineError(f"Meilisearch index status failed: {error}.") from error
+        return True
+
+    async def delete_index(self, dataset_id: str) -> None:
+        if not await self.index_exists(dataset_id):
+            return
+        response = await self._request("DELETE", f"/indexes/{index_name(dataset_id)}")
+        await self._wait_for_task(response.json()["taskUid"])
 
     async def replace_index(
         self,
@@ -49,9 +59,7 @@ class MeilisearchSearchEngine:
                 "Meilisearch indexing received a different number of chunks and vectors."
             )
         name = index_name(dataset_id)
-        if await self.index_exists(dataset_id):
-            response = await self._request("DELETE", f"/indexes/{name}")
-            await self._wait_for_task(response.json()["taskUid"])
+        await self.delete_index(dataset_id)
         response = await self._request("POST", "/indexes", json={"uid": name, "primaryKey": "id"})
         await self._wait_for_task(response.json()["taskUid"])
         response = await self._request(

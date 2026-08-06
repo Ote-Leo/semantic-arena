@@ -76,3 +76,31 @@ async def test_schema_configuration_ignores_duplicate_hidden_by_error_truncation
         engine = SolrSearchEngine(client, "http://solr.test/solr")
 
         await engine._configure_schema("arena_demo", dimensions=3)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exists", [True, False])
+async def test_delete_index_unloads_an_existing_core(exists: bool) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.params.get("action") == "STATUS":
+            status = {"name": "arena_demo"} if exists else {}
+            return httpx.Response(200, json={"status": {"arena_demo": status}})
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        engine = SolrSearchEngine(client, "http://solr.test/solr")
+
+        await engine.delete_index("demo")
+
+    unload_requests = [
+        request for request in requests if request.url.params.get("action") == "UNLOAD"
+    ]
+    assert len(unload_requests) == int(exists)
+    if unload_requests:
+        assert unload_requests[0].url.params["core"] == "arena_demo"
+        assert unload_requests[0].url.params["deleteIndex"] == "true"
+        assert unload_requests[0].url.params["deleteDataDir"] == "true"
+        assert unload_requests[0].url.params["deleteInstanceDir"] == "true"

@@ -22,6 +22,7 @@ class DatasetResponse(BaseModel):
     id: str
     name: str
     description: str
+    index_name: str
     engine_indexes: dict[str, bool]
 
 

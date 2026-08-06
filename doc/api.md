@@ -6,6 +6,7 @@
 | `GET /api/engines` | List available engines and their status. |
 | `GET /api/datasets` | List dataset manifests and per-engine index status. |
 | `POST /api/indexes` | Start indexing a selected dataset into selected engines. |
+| `DELETE /api/indexes/{dataset_id}/{engine_id}` | Delete a dataset index from one engine. |
 | `GET /api/jobs/{job_id}` | Return indexing progress, outcome, or error. |
 | `POST /api/chat` | Run a query against selected engines concurrently. |
 | `GET /api/citations/{dataset_id}/{chunk_id}` | Return source metadata for a citation. |

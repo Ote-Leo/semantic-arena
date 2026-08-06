@@ -18,6 +18,8 @@ class SearchEngine(Protocol):
 
     async def index_exists(self, dataset_id: str) -> bool: ...
 
+    async def delete_index(self, dataset_id: str) -> None: ...
+
     async def replace_index(
         self,
         dataset_id: str,
