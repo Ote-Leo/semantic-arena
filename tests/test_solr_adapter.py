@@ -58,3 +58,21 @@ async def test_replace_index_uses_the_configured_configset() -> None:
         request for request in requests if request.url.params.get("action") == "CREATE"
     )
     assert create_request.url.params["configSet"] == "/configsets/arena"
+
+
+@pytest.mark.asyncio
+async def test_schema_configuration_ignores_duplicate_hidden_by_error_truncation() -> None:
+    duplicate_response = {
+        "error": {
+            "details": "x" * 600,
+            "errorMessages": ["Field type 'arena_vector_3' already exists."],
+        }
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=duplicate_response)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        engine = SolrSearchEngine(client, "http://solr.test/solr")
+
+        await engine._configure_schema("arena_demo", dimensions=3)

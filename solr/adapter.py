@@ -157,7 +157,12 @@ class SolrSearchEngine:
         try:
             await self._request("POST", f"{self.base_url}/{core}/schema", json=command)
         except SearchEngineError as error:
-            if "already exists" not in str(error).lower():
+            cause = error.__cause__
+            is_duplicate = (
+                isinstance(cause, httpx.HTTPStatusError)
+                and "already exists" in cause.response.text.lower()
+            )
+            if not is_duplicate:
                 raise
 
     async def _admin_action(self, action: str, **params: str) -> None:
