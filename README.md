@@ -155,6 +155,19 @@ The initial ingestion formats are:
 - JSON Lines (`.jsonl`)
 - Parquet
 
+Local Parquet files can be viewed and inspected with the PyArrow-based utility in `scripts/`:
+
+```bash
+uv run python scripts/parquet_tools.py show --head 20 data.parquet
+uv run python scripts/parquet_tools.py show --columns id,title --format github data.parquet
+uv run python scripts/parquet_tools.py show --format html data.parquet > table.html
+uv run python scripts/parquet_tools.py csv --columns id,title "data/*.parquet"
+uv run python scripts/parquet_tools.py inspect data.parquet
+```
+
+`show` and `csv` accept multiple files or quoted local glob expressions. Their `--head` limit
+applies across all matching files. Run any command with `--help` for its complete options.
+
 Chunking will be deterministic and paragraph-aware, retaining source path, record number, chunk number, and character offsets. These fields provide stable citations and ensure both engines index identical records.
 
 ## Model Configuration
