@@ -78,7 +78,7 @@ def create_app(
             runtime.embedding_api_key,
         )
         active_engines = engines or {
-            "solr": SolrSearchEngine(client, runtime.solr_url),
+            "solr": SolrSearchEngine(client, runtime.solr_url, runtime.solr_configset),
             "meilisearch": MeilisearchSearchEngine(
                 client, runtime.meilisearch_url, runtime.meilisearch_master_key
             ),

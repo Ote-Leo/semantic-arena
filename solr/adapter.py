@@ -16,9 +16,15 @@ class SolrSearchEngine:
     id = "solr"
     label = "Apache Solr"
 
-    def __init__(self, client: httpx.AsyncClient, base_url: str) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        configset: str = "semantic-arena",
+    ) -> None:
         self.client = client
         self.base_url = base_url.rstrip("/")
+        self.configset = configset
 
     async def health(self) -> tuple[bool, str]:
         try:
@@ -40,7 +46,8 @@ class SolrSearchEngine:
             response.raise_for_status()
         except httpx.HTTPError:
             return False
-        return name in response.json().get("status", {})
+        core_status = response.json().get("status", {}).get(name, {})
+        return core_status.get("name") == name
 
     async def replace_index(
         self,
@@ -62,7 +69,7 @@ class SolrSearchEngine:
                 deleteDataDir="true",
                 deleteInstanceDir="true",
             )
-        await self._admin_action("CREATE", name=name, instanceDir=name, configSet="_default")
+        await self._admin_action("CREATE", name=name, instanceDir=name, configSet=self.configset)
         await self._configure_schema(name, dimensions)
         documents = [
             self._index_document(chunk, vector)

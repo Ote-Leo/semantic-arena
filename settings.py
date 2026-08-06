@@ -18,6 +18,7 @@ class RuntimeSettings(BaseSettings):
     )
 
     solr_url: str = "http://localhost:8983/solr"
+    solr_configset: str = "semantic-arena"
     meilisearch_url: str = "http://localhost:7700"
     meilisearch_master_key: str = "change-this-development-key"
     embedding_base_url: str = ""
