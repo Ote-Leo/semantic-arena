@@ -1,9 +1,11 @@
+import json
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
 from datasets.models import Chunk
+from search.naming import staging_index_name
 from solr.adapter import SolrSearchEngine
 
 
@@ -27,7 +29,7 @@ async def test_index_exists_requires_a_real_core_status(
 
 
 @pytest.mark.asyncio
-async def test_replace_index_uses_the_configured_configset() -> None:
+async def test_staged_index_uses_the_configured_configset() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -52,12 +54,24 @@ async def test_replace_index_uses_the_configured_configset() -> None:
         engine = SolrSearchEngine(client, "http://solr.test/solr", "/configsets/arena")
         engine._configure_schema = AsyncMock()  # type: ignore[method-assign]
 
-        await engine.replace_index("demo", [chunk], [[0.1, 0.2, 0.3]], dimensions=3)
+        await engine.prepare_index("demo", dimensions=3)
+        await engine.index_batch("demo", [chunk], [[0.1, 0.2, 0.3]])
+        await engine.finalize_index("demo")
 
     create_request = next(
         request for request in requests if request.url.params.get("action") == "CREATE"
     )
     assert create_request.url.params["configSet"] == "/configsets/arena"
+    assert create_request.url.params["name"] == staging_index_name("demo")
+    assert any(
+        request.url.path.endswith(f"/{staging_index_name('demo')}/update")
+        for request in requests
+    )
+    rename_request = next(
+        request for request in requests if request.url.params.get("action") == "RENAME"
+    )
+    assert rename_request.url.params["core"] == staging_index_name("demo")
+    assert rename_request.url.params["other"] == "arena_demo"
 
 
 @pytest.mark.asyncio
@@ -70,6 +84,8 @@ async def test_schema_configuration_ignores_duplicate_hidden_by_error_truncation
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if "replace-field" in json.loads(request.content):
+            return httpx.Response(200, json={})
         return httpx.Response(400, json=duplicate_response)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:

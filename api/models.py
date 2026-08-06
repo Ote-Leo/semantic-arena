@@ -39,6 +39,7 @@ class JobResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    processed_chunks: int
     result: dict[str, int] | None
     error: str | None
 
@@ -61,6 +62,7 @@ class CitationResponse(BaseModel):
     chunk_id: str
     quote: str
     title: str
+    text: str
     source_path: str
     record_index: int
     chunk_index: int

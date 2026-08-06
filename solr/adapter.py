@@ -9,7 +9,7 @@ import httpx
 from datasets.models import Chunk
 from search.base import SearchEngineError
 from search.models import SearchHit
-from search.naming import index_name
+from search.naming import index_name, staging_index_name
 
 
 class SolrSearchEngine:
@@ -37,7 +37,9 @@ class SolrSearchEngine:
         return True, "ready"
 
     async def index_exists(self, dataset_id: str) -> bool:
-        name = index_name(dataset_id)
+        return await self._core_exists(index_name(dataset_id))
+
+    async def _core_exists(self, name: str) -> bool:
         response = await self._request(
             "GET",
             f"{self.base_url}/admin/cores",
@@ -47,31 +49,40 @@ class SolrSearchEngine:
         return core_status.get("name") == name
 
     async def delete_index(self, dataset_id: str) -> None:
-        if not await self.index_exists(dataset_id):
+        await self._delete_core(index_name(dataset_id))
+
+    async def _delete_core(self, name: str) -> None:
+        if not await self._core_exists(name):
             return
         await self._admin_action(
             "UNLOAD",
-            core=index_name(dataset_id),
+            core=name,
             deleteIndex="true",
             deleteDataDir="true",
             deleteInstanceDir="true",
         )
 
-    async def replace_index(
+    async def prepare_index(
+        self,
+        dataset_id: str,
+        dimensions: int,
+    ) -> None:
+        name = staging_index_name(dataset_id)
+        await self._delete_core(name)
+        await self._admin_action("CREATE", name=name, instanceDir=name, configSet=self.configset)
+        await self._configure_schema(name, dimensions)
+
+    async def index_batch(
         self,
         dataset_id: str,
         chunks: list[Chunk],
         vectors: list[list[float]],
-        dimensions: int,
     ) -> None:
         if len(chunks) != len(vectors):
             raise SearchEngineError(
                 "Solr indexing received a different number of chunks and vectors."
             )
-        name = index_name(dataset_id)
-        await self.delete_index(dataset_id)
-        await self._admin_action("CREATE", name=name, instanceDir=name, configSet=self.configset)
-        await self._configure_schema(name, dimensions)
+        name = staging_index_name(dataset_id)
         documents = [
             self._index_document(chunk, vector)
             for chunk, vector in zip(chunks, vectors, strict=True)
@@ -83,12 +94,24 @@ class SolrSearchEngine:
                 params={"commit": "false"},
                 json=batch,
             )
+
+    async def finalize_index(self, dataset_id: str) -> None:
+        staging = staging_index_name(dataset_id)
         await self._request(
             "POST",
-            f"{self.base_url}/{name}/update",
+            f"{self.base_url}/{staging}/update",
             params={"commit": "true"},
             json={"commit": {}},
         )
+        name = index_name(dataset_id)
+        if await self._core_exists(name):
+            await self._admin_action("SWAP", core=staging, other=name)
+            await self._delete_core(staging)
+        else:
+            await self._admin_action("RENAME", core=staging, other=name)
+
+    async def abort_index(self, dataset_id: str) -> None:
+        await self._delete_core(staging_index_name(dataset_id))
 
     async def lexical_search(self, dataset_id: str, query: str, limit: int) -> list[SearchHit]:
         name = index_name(dataset_id)
@@ -153,6 +176,12 @@ class SolrSearchEngine:
         ]
         for field in fields:
             await self._add_schema_command(core, {"add-field": field})
+            if field["name"] == "vector":
+                await self._request(
+                    "POST",
+                    f"{self.base_url}/{core}/schema",
+                    json={"replace-field": field},
+                )
 
     async def _add_schema_command(self, core: str, command: dict[str, Any]) -> None:
         try:

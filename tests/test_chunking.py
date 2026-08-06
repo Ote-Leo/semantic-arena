@@ -1,4 +1,8 @@
+from itertools import pairwise
+
 from datasets.catalog import DatasetCatalog
+from datasets.chunking import chunk_document
+from datasets.models import SourceDocument
 
 
 def test_demo_dataset_produces_stable_chunks() -> None:
@@ -23,3 +27,28 @@ def test_catalog_exposes_supported_demo_sources() -> None:
         "documents/metformin.md",
         "documents/trial.jsonl",
     }
+
+
+def test_short_paragraphs_do_not_cause_one_character_chunk_progress() -> None:
+    text = "\n\n".join(f"Paragraph {index} has useful content." for index in range(50))
+    document = SourceDocument(
+        id="paragraphs",
+        title="Paragraphs",
+        text=text,
+        source_path="paragraphs.txt",
+        record_index=0,
+    )
+
+    chunks = chunk_document(
+        document,
+        dataset_id="test",
+        max_characters=200,
+        overlap_characters=30,
+    )
+
+    assert len(chunks) < 15
+    assert all(len(chunk.text) <= 200 for chunk in chunks)
+    assert all(
+        later.start_char - earlier.start_char >= 140
+        for earlier, later in pairwise(chunks)
+    )

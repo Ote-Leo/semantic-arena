@@ -2,16 +2,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SourceSpec(BaseModel):
     glob: str
     format: str
     text_field: str | None = None
+    text_fields: list[str] = Field(default_factory=list)
     title_field: str | None = None
+    title_fields: list[str] = Field(default_factory=list)
     id_field: str | None = None
+    json_field: str | None = None
+    duplicate_id_policy: Literal["allow", "error", "skip-identical"] = "allow"
+
+    @model_validator(mode="after")
+    def validate_extraction(self) -> SourceSpec:
+        if self.text_field and self.text_fields:
+            raise ValueError("Use either text_field or text_fields, not both.")
+        if self.title_field and self.title_fields:
+            raise ValueError("Use either title_field or title_fields, not both.")
+        if self.duplicate_id_policy != "allow" and not self.id_field:
+            raise ValueError("duplicate_id_policy requires id_field.")
+        return self
 
 
 class DatasetManifest(BaseModel):

@@ -1,0 +1,39 @@
+id: zbdoc
+name: DRKS Clinical Trials
+description: German Clinical Trials Register records with bilingual descriptions and recruitment data.
+sources:
+  # - glob: batch_*.parquet
+  - glob: batch_0_1000.parquet
+    format: parquet
+    id_field: id
+    json_field: source_data
+    duplicate_id_policy: skip-identical
+    title_fields:
+      - drksId
+      - trialDescriptions[].title
+    text_fields:
+      - drksId
+      - trialStatus
+      - registrationDrks
+      - registrationType
+      - lastUpdate
+      - sponsored
+      - trialDescriptions
+      - observationalGroups
+      - studyCharacteristic
+      - secondaryIds
+      - otherSecondaryIds
+      - studiedHealthConditions
+      - recruitment
+      - trialResults.trialResultsDescriptions
+      - trialResults.plannedPublication
+      - trialResults.firstPublication
+      - trialResults.firstResultPublication
+      - trialResults.publications[].type
+      - trialResults.publications[].description
+      - trialResults.relatedDrksTrials
+      - ethicsCommittee.applicationDate
+      - ethicsCommittee.number
+      - ethicsCommittee.ethicVotes[].dateOfVote
+      - ethicsCommittee.ethicVotes[].vote
+      - ethicsCommittee.ethicVotes[].type

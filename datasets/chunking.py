@@ -24,7 +24,11 @@ def chunk_document(
     start = 0
     while start < len(text):
         target = min(start + max_characters, len(text))
-        end = _best_boundary(paragraphs, start, target)
+        end = (
+            target
+            if target == len(text)
+            else _best_boundary(paragraphs, start, target, overlap_characters)
+        )
         if end <= start:
             end = target
         windows.append((start, end))
@@ -72,8 +76,11 @@ def _paragraphs_with_offsets(text: str) -> list[tuple[int, int]]:
     return paragraphs
 
 
-def _best_boundary(paragraphs: list[tuple[int, int]], start: int, target: int) -> int:
-    candidates = [end for _, end in paragraphs if start < end <= target]
+def _best_boundary(
+    paragraphs: list[tuple[int, int]], start: int, target: int, overlap: int
+) -> int:
+    earliest = target - overlap
+    candidates = [end for _, end in paragraphs if max(start, earliest) < end <= target]
     if candidates:
         return candidates[-1]
     return target

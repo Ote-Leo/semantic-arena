@@ -28,7 +28,7 @@ from datasets.catalog import DatasetCatalog, DatasetNotFoundError
 from embeddings.base import Embedder, EmbeddingError
 from embeddings.openai_compatible import OpenAICompatibleEmbedder
 from indexing.service import IndexingService
-from jobs.manager import JobManager, JobRecord
+from jobs.manager import JobConflictError, JobManager, JobRecord
 from meilisearch.adapter import MeilisearchSearchEngine
 from rag.selector import (
     DeterministicExtractiveSelector,
@@ -98,7 +98,13 @@ def create_app(
         else:
             active_selector = DeterministicExtractiveSelector()
             selector_mode = "deterministic-extractive"
-        indexing = IndexingService(catalog, active_embedder, active_engines)
+        indexing = IndexingService(
+            catalog,
+            active_embedder,
+            active_engines,
+            embedding_batch_size=arena_config.indexing.embedding_batch_size,
+            chunk_batch_size=arena_config.indexing.chunk_batch_size,
+        )
         app.state.services = ArenaServices(
             catalog=catalog,
             embedder=active_embedder,
@@ -202,7 +208,11 @@ def create_app(
         services = _services(request)
         _require_dataset(services.catalog, payload.dataset_id)
         _require_engines(services, payload.engine_ids)
-        return _job_response(services.jobs.start(payload.dataset_id, payload.engine_ids))
+        try:
+            job = services.jobs.start(payload.dataset_id, payload.engine_ids)
+        except JobConflictError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        return _job_response(job)
 
     @app.delete(
         "/api/indexes/{dataset_id}/{engine_id}",
@@ -322,6 +332,7 @@ async def _answer_with_engine(
                     chunk_id=citation.chunk.id,
                     quote=citation.quote,
                     title=citation.chunk.title,
+                    text=citation.chunk.text,
                     source_path=citation.chunk.source_path,
                     record_index=citation.chunk.record_index,
                     chunk_index=citation.chunk.chunk_index,
@@ -392,6 +403,7 @@ def _job_response(record: JobRecord) -> JobResponse:
         created_at=record.created_at,
         started_at=record.started_at,
         finished_at=record.finished_at,
+        processed_chunks=record.processed_chunks,
         result=record.result,
         error=record.error,
     )

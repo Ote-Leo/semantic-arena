@@ -26,6 +26,7 @@ class FakeEngine:
     def __init__(self, chunks: list[Chunk]) -> None:
         self.chunks = chunks
         self.indexed = False
+        self.staging_chunks: list[Chunk] = []
 
     async def health(self) -> tuple[bool, str]:
         return True, "ready"
@@ -36,17 +37,25 @@ class FakeEngine:
     async def delete_index(self, dataset_id: str) -> None:
         self.indexed = False
 
-    async def replace_index(
+    async def prepare_index(self, dataset_id: str, dimensions: int) -> None:
+        self.staging_chunks = []
+
+    async def index_batch(
         self,
         dataset_id: str,
         chunks: list[Chunk],
         vectors: list[list[float]],
-        dimensions: int,
     ) -> None:
         assert len(chunks) == len(vectors)
-        assert all(len(vector) == dimensions for vector in vectors)
-        self.chunks = chunks
+        assert all(len(vector) == 3 for vector in vectors)
+        self.staging_chunks.extend(chunks)
+
+    async def finalize_index(self, dataset_id: str) -> None:
+        self.chunks = self.staging_chunks
         self.indexed = True
+
+    async def abort_index(self, dataset_id: str) -> None:
+        self.staging_chunks = []
 
     async def lexical_search(self, dataset_id: str, query: str, limit: int) -> list[SearchHit]:
         return [
@@ -100,6 +109,7 @@ def test_api_returns_exact_evidence_and_rejects_unrelated_question() -> None:
     assert result["no_data"] is False
     assert result["citations"]
     assert result["citations"][0]["quote"] in result["message"]
+    assert result["citations"][0]["quote"] in result["citations"][0]["text"]
     assert unsupported.status_code == 200
     assert unsupported.json()["results"][0]["message"] == "there are no available data"
 
@@ -120,6 +130,7 @@ def test_api_index_job_uses_shared_chunks_and_vectors() -> None:
 
     assert job["status"] == "succeeded"
     assert job["result"] == {"fake": 3}
+    assert job["processed_chunks"] == 3
 
 
 def test_api_lists_and_deletes_a_dataset_index() -> None:

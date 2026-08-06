@@ -189,7 +189,7 @@ async function startIndex() {
 async function pollJob(jobId) {
   for (;;) {
     const job = await request(`/api/jobs/${jobId}`);
-    elements.indexStatus.textContent = `Index build: ${job.status}.`;
+    elements.indexStatus.textContent = `Index build: ${job.status}; ${job.processed_chunks.toLocaleString()} chunks processed.`;
     if (job.status === "succeeded") return;
     if (job.status === "failed") throw new Error(job.error || "Index build failed.");
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -292,22 +292,17 @@ function renderResult(result) {
 }
 
 async function openCitation(citation) {
-  try {
-    const source = await request(`/api/citations/${state.selectedDataset}/${citation.chunk_id}`);
-    const modal = document.createElement("div");
-    modal.className = "modal";
-    modal.innerHTML = `
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.innerHTML = `
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-label="Citation source">
-        <header><div><p class="eyebrow">${escapeHtml(source.source_path)} / CHUNK ${source.chunk_index}</p><h3>${escapeHtml(source.title)}</h3></div><button type="button">Close</button></header>
+        <header><div><p class="eyebrow">${escapeHtml(citation.source_path)} / CHUNK ${citation.chunk_index}</p><h3>${escapeHtml(citation.title)}</h3></div><button type="button">Close</button></header>
         <pre></pre>
       </div>`;
-    modal.querySelector("pre").textContent = source.text;
-    modal.querySelector("button").addEventListener("click", () => modal.remove());
-    modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
-    document.body.append(modal);
-  } catch (error) {
-    showNotice(error.message, "error");
-  }
+  modal.querySelector("pre").textContent = citation.text;
+  modal.querySelector("button").addEventListener("click", () => modal.remove());
+  modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
+  document.body.append(modal);
 }
 
 function escapeHtml(value) {

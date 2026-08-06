@@ -9,7 +9,7 @@ import httpx
 from datasets.models import Chunk
 from search.base import SearchEngineError
 from search.models import SearchHit
-from search.naming import index_name
+from search.naming import index_name, staging_index_name
 
 
 class MeilisearchSearchEngine:
@@ -30,8 +30,11 @@ class MeilisearchSearchEngine:
         return True, "ready"
 
     async def index_exists(self, dataset_id: str) -> bool:
+        return await self._index_exists(index_name(dataset_id))
+
+    async def _index_exists(self, name: str) -> bool:
         response = await self.client.get(
-            f"{self.base_url}/indexes/{index_name(dataset_id)}", headers=self.headers
+            f"{self.base_url}/indexes/{name}", headers=self.headers
         )
         if response.status_code == 404:
             return False
@@ -42,24 +45,21 @@ class MeilisearchSearchEngine:
         return True
 
     async def delete_index(self, dataset_id: str) -> None:
-        if not await self.index_exists(dataset_id):
+        await self._delete_index(index_name(dataset_id))
+
+    async def _delete_index(self, name: str) -> None:
+        if not await self._index_exists(name):
             return
-        response = await self._request("DELETE", f"/indexes/{index_name(dataset_id)}")
+        response = await self._request("DELETE", f"/indexes/{name}")
         await self._wait_for_task(response.json()["taskUid"])
 
-    async def replace_index(
+    async def prepare_index(
         self,
         dataset_id: str,
-        chunks: list[Chunk],
-        vectors: list[list[float]],
         dimensions: int,
     ) -> None:
-        if len(chunks) != len(vectors):
-            raise SearchEngineError(
-                "Meilisearch indexing received a different number of chunks and vectors."
-            )
-        name = index_name(dataset_id)
-        await self.delete_index(dataset_id)
+        name = staging_index_name(dataset_id)
+        await self._delete_index(name)
         response = await self._request("POST", "/indexes", json={"uid": name, "primaryKey": "id"})
         await self._wait_for_task(response.json()["taskUid"])
         response = await self._request(
@@ -72,6 +72,18 @@ class MeilisearchSearchEngine:
             },
         )
         await self._wait_for_task(response.json()["taskUid"])
+
+    async def index_batch(
+        self,
+        dataset_id: str,
+        chunks: list[Chunk],
+        vectors: list[list[float]],
+    ) -> None:
+        if len(chunks) != len(vectors):
+            raise SearchEngineError(
+                "Meilisearch indexing received a different number of chunks and vectors."
+            )
+        name = staging_index_name(dataset_id)
         documents = [
             self._index_document(chunk, vector)
             for chunk, vector in zip(chunks, vectors, strict=True)
@@ -79,6 +91,23 @@ class MeilisearchSearchEngine:
         for batch in _batches(documents, 100):
             response = await self._request("POST", f"/indexes/{name}/documents", json=batch)
             await self._wait_for_task(response.json()["taskUid"])
+
+    async def finalize_index(self, dataset_id: str) -> None:
+        name = index_name(dataset_id)
+        staging = staging_index_name(dataset_id)
+        if not await self._index_exists(name):
+            response = await self._request(
+                "POST", "/indexes", json={"uid": name, "primaryKey": "id"}
+            )
+            await self._wait_for_task(response.json()["taskUid"])
+        response = await self._request(
+            "POST", "/swap-indexes", json=[{"indexes": [staging, name]}]
+        )
+        await self._wait_for_task(response.json()["taskUid"])
+        await self._delete_index(staging)
+
+    async def abort_index(self, dataset_id: str) -> None:
+        await self._delete_index(staging_index_name(dataset_id))
 
     async def lexical_search(self, dataset_id: str, query: str, limit: int) -> list[SearchHit]:
         response = await self._request(

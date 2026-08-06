@@ -20,13 +20,22 @@ class SearchEngine(Protocol):
 
     async def delete_index(self, dataset_id: str) -> None: ...
 
-    async def replace_index(
+    async def prepare_index(
+        self,
+        dataset_id: str,
+        dimensions: int,
+    ) -> None: ...
+
+    async def index_batch(
         self,
         dataset_id: str,
         chunks: list[Chunk],
         vectors: list[list[float]],
-        dimensions: int,
     ) -> None: ...
+
+    async def finalize_index(self, dataset_id: str) -> None: ...
+
+    async def abort_index(self, dataset_id: str) -> None: ...
 
     async def lexical_search(self, dataset_id: str, query: str, limit: int) -> list[SearchHit]: ...
 
