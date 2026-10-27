@@ -78,6 +78,9 @@ uv run python scripts/parquet_tools.py show --head 20 data.parquet
 uv run python scripts/parquet_tools.py show --columns id,title --format github data.parquet
 uv run python scripts/parquet_tools.py show --format html --expand-json --head 10 data.parquet > table.html
 uv run python scripts/parquet_tools.py csv --columns id,title "data/*.parquet"
+uv run python scripts/parquet_tools.py compile "data/*.parquet" > data.jsonl
+uv run python scripts/parquet_tools.py compile --format jsonl --output data.jsonl \
+  "sample-data/zbdoc/*.parquet"
 uv run python scripts/parquet_tools.py record --row 0 data.parquet
 uv run python scripts/parquet_tools.py record --id DRKS00039129 --format html \
   "sample-data/zbdoc/*.parquet" > record.html
@@ -89,9 +92,12 @@ uv run python scripts/parquet_tools.py inspect --format text data.parquet
 applies across all matching files. For HTML output, `--expand-json` detects JSON strings and renders
 their objects and arrays as collapsible nested tables. `record` selects one record by its zero-based
 row or by an ID and expands JSON strings automatically; it outputs formatted JSON by default or a
-self-contained HTML document with `--format html`. `inspect` outputs formatted JSON by default,
-including the Arrow data schema, Parquet physical columns, row groups, compression, and column
-statistics. Use `--format text` for the compact human-readable view.
+self-contained HTML document with `--format html`. `compile` decodes the `source_data` column by
+default and streams every object to the output as one JSONL record per line, preserving duplicate
+rows. Output defaults to stdout; use `--output` to write directly to a file and `--json-column` for
+a differently named payload column. `inspect` outputs formatted JSON by default, including the
+Arrow data schema, Parquet physical columns, row groups, compression, and column statistics. Use
+`--format text` for the compact human-readable view.
 
 From WSL2, a generated document can be opened in a system-wide Windows Brave installation with:
 

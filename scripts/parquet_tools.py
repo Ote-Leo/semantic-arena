@@ -333,6 +333,39 @@ def write_csv(
             writer.writerow([record[column] for column in headers])
 
 
+def write_jsonl(paths: Sequence[Path], json_column: str, output_path: Path | None) -> None:
+    _, batches = _iter_batches(paths, [json_column], -1)
+    row_index = 0
+    output = (
+        sys.stdout
+        if output_path is None
+        else output_path.open("w", encoding="utf-8", newline="\n")
+    )
+    try:
+        for batch in batches:
+            for raw_value in batch.column(0).to_pylist():
+                if not isinstance(raw_value, str):
+                    raise CommandError(
+                        f"JSON column {json_column!r} must contain strings (row {row_index})"
+                    )
+                try:
+                    record = json.loads(raw_value)
+                except json.JSONDecodeError as error:
+                    raise CommandError(
+                        f"invalid JSON in column {json_column!r} at row {row_index}: {error.msg}"
+                    ) from error
+                if not isinstance(record, dict):
+                    raise CommandError(
+                        f"JSON column {json_column!r} must contain objects (row {row_index})"
+                    )
+                json.dump(record, output, ensure_ascii=False, separators=(",", ":"))
+                output.write("\n")
+                row_index += 1
+    finally:
+        if output_path is not None:
+            output.close()
+
+
 def _record_at(parquet_file: pq.ParquetFile, row: int) -> dict[str, Any]:
     remaining = row
     for batch in parquet_file.iter_batches(batch_size=1_024):
@@ -626,6 +659,22 @@ def build_parser() -> argparse.ArgumentParser:
     csv_parser.add_argument("--columns", "-c", action="append", type=_columns)
     csv_parser.add_argument("--head", "-n", type=_head, default=-1)
 
+    compile_parser = subparsers.add_parser(
+        "compile", help="Compile a JSON string column as JSON Lines"
+    )
+    compile_parser.add_argument("file", metavar="FILE", nargs="+")
+    compile_parser.add_argument(
+        "--format", "-f", choices=("jsonl",), default="jsonl"
+    )
+    compile_parser.add_argument(
+        "--output", "-o", type=Path, help="Destination JSONL file (default: stdout)"
+    )
+    compile_parser.add_argument(
+        "--json-column",
+        default="source_data",
+        help="Column containing JSON objects (default: source_data)",
+    )
+
     record_parser = subparsers.add_parser("record", help="Show one record with JSON expanded")
     record_parser.add_argument("file", metavar="FILE", nargs="+")
     selector = record_parser.add_mutually_exclusive_group()
@@ -662,6 +711,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 id_column=args.id_column,
                 output_format=args.format,
             )
+        elif args.command == "compile":
+            write_jsonl(_expand_files(args.file), args.json_column, args.output)
         else:
             paths = _expand_files(args.file)
             columns = _flatten_columns(args.columns)

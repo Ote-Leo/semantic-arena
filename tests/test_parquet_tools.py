@@ -162,6 +162,77 @@ def test_record_reports_missing_id(
     assert "record not found where id='missing'" in captured.err
 
 
+def test_compile_writes_jsonl_and_preserves_duplicate_rows(
+    json_parquet_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    duplicate_path = tmp_path / "duplicate.parquet"
+    pq.write_table(pq.read_table(json_parquet_file).slice(0, 1), duplicate_path)
+    output_path = tmp_path / "records.jsonl"
+
+    result = main(
+        [
+            "compile",
+            "--format=jsonl",
+            f"--output={output_path}",
+            str(json_parquet_file),
+            str(duplicate_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    records = [json.loads(line) for line in output_path.read_text().splitlines()]
+    assert result == 0
+    assert [record["trialStatus"] for record in records] == [
+        "UPDATED",
+        "REGISTERED",
+        "UPDATED",
+    ]
+    assert records[0]["contacts"] == [{"name": "Alice & Bob", "role": "owner"}]
+    assert all("source_data" not in record and "id" not in record for record in records)
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_compile_defaults_to_stdout(
+    json_parquet_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    result = main(["compile", str(json_parquet_file)])
+
+    captured = capsys.readouterr()
+    records = [json.loads(line) for line in captured.out.splitlines()]
+    assert result == 0
+    assert [record["trialStatus"] for record in records] == ["UPDATED", "REGISTERED"]
+    assert captured.err == ""
+
+
+def test_compile_reports_malformed_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "invalid.parquet"
+    pq.write_table(pa.table({"source_data": [json.dumps({"valid": True}), "not JSON"]}), path)
+
+    result = main(["compile", "--output", str(tmp_path / "output.jsonl"), str(path)])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert "invalid JSON in column 'source_data' at row 1" in captured.err
+
+
+def test_compile_validates_json_column(
+    parquet_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output_path = tmp_path / "output.jsonl"
+
+    result = main(["compile", "--output", str(output_path), str(parquet_file)])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert not output_path.exists()
+    assert captured.out == ""
+    assert "unknown columns: source_data" in captured.err
+
+
 def test_csv_writes_valid_escaped_output(
     parquet_file: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
