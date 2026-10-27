@@ -1,0 +1,4 @@
+{"query_id":"study-objective","query":"Was ist das Ziel der Studie?","relevant_chunk_ids":[]}
+{"query_id":"eligible-patients","query":"Welche Patientengruppe wird untersucht?","relevant_chunk_ids":[]}
+{"query_id":"study-intervention","query":"Welche Behandlung oder Intervention wird geprüft?","relevant_chunk_ids":[]}
+{"query_id":"study-outcomes","query":"Welche Endpunkte werden gemessen?","relevant_chunk_ids":[]}

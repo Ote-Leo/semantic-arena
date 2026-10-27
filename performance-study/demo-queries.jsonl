@@ -1,0 +1,4 @@
+{"query_id":"metformin-use","query":"What condition is metformin used to manage?","relevant_chunk_ids":["b2f7d56916c59f37bdbcb45c"]}
+{"query_id":"trial-age-range","query":"What age range could participate in the trial?","relevant_chunk_ids":["e6f75f0bc25a23c3049fcdfd"]}
+{"query_id":"trial-primary-outcome","query":"What was the primary outcome and when was it measured?","relevant_chunk_ids":["e6f75f0bc25a23c3049fcdfd"]}
+{"query_id":"adverse-effects","query":"Which adverse effects were monitored during follow-up?","relevant_chunk_ids":["cf6f6c498915dad4c672867c"]}
